@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from 'react';
-import { Sprout, Mail, Lock, ArrowRight } from 'lucide-react';
+import { Sprout, Mail, Lock, ArrowRight, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -70,6 +70,14 @@ export default function LoginPage() {
         {/* RIGHT SIDE */}
         <div className="md:w-3/5 p-12 md:p-16 flex flex-col justify-center bg-white">
           <div className="max-w-sm mx-auto w-full">
+              {/* TOMBOL BACK — tambah di sini */}
+  <button
+    onClick={() => router.back()}
+    className="flex items-center gap-2 text-slate-400 hover:text-slate-600 text-xs font-bold uppercase tracking-wider mb-8 transition-colors group"
+  >
+    <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
+    Back
+  </button>
             <h2 className="text-2xl font-black text-slate-900 mb-2">Sign In</h2>
             <p className="text-xs font-bold text-slate-400 mb-10">
               Belum punya akun?{" "}
