@@ -1,5 +1,6 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Sprout, 
   Moon, 
@@ -15,37 +16,40 @@ import Link from 'next/link';
 
 export default function HistoryLogPage() {
   const [isDark, setIsDark] = useState(false);
+  const [logs, setLogs] = useState<any[]>([]);
+  const router = useRouter();
 
-  // Data dummy sesuai dengan gambar System Journal yang kamu kirim
-  const logs = [
-    {
-      id: 1,
-      title: "Hama Terdeteksi",
-      description: "Sensor PIR menangkap pergerakan. Sistem keamanan standby.",
-      time: "14:20 PM",
-      icon: <Bug size={18} />,
-      iconBg: "bg-red-500/10",
-      iconColor: "text-red-500",
-    },
-    {
-      id: 2,
-      title: "Penyiraman Otomatis",
-      description: "Kelembapan 22%. Pompa aktif selama 30 detik.",
-      time: "12:05 PM",
-      icon: <Droplets size={18} />,
-      iconBg: "bg-blue-500/10",
-      iconColor: "text-blue-500",
-    },
-    {
-      id: 3,
-      title: "System Connected",
-      description: "Berhasil terhubung ke WiFi Polibatam.",
-      time: "09:00 AM",
-      icon: <Zap size={18} />,
-      iconBg: "bg-yellow-500/10",
-      iconColor: "text-yellow-500",
+  useEffect(() => {
+    fetch("/api/logs")
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) setLogs(data.logs);
+      });
+  }, []);
+
+  const handleLogout = async () => {
+    await fetch("/api/logout", { method: "POST" });
+    router.push("/auth/login");
+    router.refresh();
+  };
+
+  const handleClearLogs = async () => {
+    await fetch("/api/logs", { method: "DELETE" });
+    setLogs([]);
+  };
+
+  const getLogStyle = (type: string) => {
+    switch (type) {
+      case "pest":
+        return { icon: <Bug size={18} />, iconBg: "bg-red-500/10", iconColor: "text-red-500" };
+      case "watering":
+        return { icon: <Droplets size={18} />, iconBg: "bg-blue-500/10", iconColor: "text-blue-500" };
+      case "connected":
+        return { icon: <Zap size={18} />, iconBg: "bg-yellow-500/10", iconColor: "text-yellow-500" };
+      default:
+        return { icon: <Zap size={18} />, iconBg: "bg-slate-500/10", iconColor: "text-slate-500" };
     }
-  ];
+  };
 
   return (
     <div className={`min-h-screen transition-all duration-500 p-8 font-sans ${isDark ? 'bg-[#0B0F10]' : 'bg-[#F0F4F4]'}`}>
@@ -69,7 +73,10 @@ export default function HistoryLogPage() {
           <button onClick={() => setIsDark(!isDark)} className={`p-3 rounded-full transition-all ${isDark ? 'bg-slate-700 text-yellow-400' : 'bg-slate-100 text-slate-600'}`}>
             {isDark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
-          <button className="bg-[#FF4D12] text-white px-6 py-3 rounded-full font-bold text-sm flex items-center gap-2 shadow-lg shadow-orange-200/20 hover:scale-105 transition-all">
+          <button
+            onClick={handleLogout}
+            className="bg-[#FF4D12] text-white px-6 py-3 rounded-full font-bold text-sm flex items-center gap-2 shadow-lg shadow-orange-200/20 hover:scale-105 transition-all"
+          >
             Logout <LogOut size={16} />
           </button>
         </div>
@@ -81,8 +88,11 @@ export default function HistoryLogPage() {
         {/* HEADER SECTION */}
         <div className="flex justify-between items-center mb-16 px-4">
           <h1 className={`text-3xl font-black ${isDark ? 'text-white' : 'text-[#1E293B]'}`}>System Journal</h1>
-          <button className={`flex items-center gap-2 px-6 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 ${isDark ? 'border-slate-700 text-slate-400 hover:bg-slate-800' : 'border-slate-200 text-slate-400 hover:bg-slate-50'}`}>
-            Clear Logs
+          <button
+            onClick={handleClearLogs}
+            className={`flex items-center gap-2 px-6 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 ${isDark ? 'border-slate-700 text-slate-400 hover:bg-slate-800' : 'border-slate-200 text-slate-400 hover:bg-slate-50'}`}
+          >
+            <Trash2 size={14} /> Clear Logs
           </button>
         </div>
 
@@ -91,37 +101,34 @@ export default function HistoryLogPage() {
           {/* Vertical Line */}
           <div className={`absolute left-12 top-0 bottom-0 w-[2px] ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}></div>
 
-          {/* LOG ITEMS */}
-          <div className="space-y-12">
-            {logs.map((log) => (
-              <div key={log.id} className="relative flex items-center gap-10 group">
-                {/* Icon Circle */}
-                <div className={`z-10 w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 shadow-sm ${isDark ? 'bg-[#1C2426] ring-4 ring-[#161C1E]' : 'bg-white ring-8 ring-white'} ${log.iconBg} ${log.iconColor}`}>
-                  {log.icon}
-                </div>
-
-                {/* Content Card */}
-                <div className={`flex-1 p-8 rounded-[2rem] border transition-all duration-300 flex items-center justify-between hover:translate-x-2 ${isDark ? 'bg-[#1C2426] border-slate-800 hover:bg-[#232d30]' : 'bg-white border-slate-50 shadow-[0_10px_30px_rgba(0,0,0,0.02)] hover:shadow-lg hover:shadow-slate-100'}`}>
-                  <div>
-                    <h3 className={`font-black text-sm mb-1 ${isDark ? 'text-white' : 'text-slate-800'}`}>{log.title}</h3>
-                    <p className={`text-xs font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{log.description}</p>
+          {logs.length === 0 ? (
+            <div className="flex flex-col items-center py-20 opacity-30">
+              <Clock size={40} className={isDark ? 'text-slate-600' : 'text-slate-300'} />
+              <p className={`text-[10px] font-black uppercase tracking-[0.3em] mt-4 ${isDark ? 'text-slate-600' : 'text-slate-300'}`}>Belum ada log</p>
+            </div>
+          ) : (
+            <div className="space-y-12">
+              {logs.map((log) => {
+                const style = getLogStyle(log.type);
+                return (
+                  <div key={log.id} className="relative flex items-center gap-10 group">
+                    <div className={`z-10 w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 shadow-sm ${isDark ? 'bg-[#1C2426] ring-4 ring-[#161C1E]' : 'bg-white ring-8 ring-white'} ${style.iconBg} ${style.iconColor}`}>
+                      {style.icon}
+                    </div>
+                    <div className={`flex-1 p-8 rounded-[2rem] border transition-all duration-300 flex items-center justify-between hover:translate-x-2 ${isDark ? 'bg-[#1C2426] border-slate-800 hover:bg-[#232d30]' : 'bg-white border-slate-50 shadow-[0_10px_30px_rgba(0,0,0,0.02)] hover:shadow-lg hover:shadow-slate-100'}`}>
+                      <div>
+                        <h3 className={`font-black text-sm mb-1 ${isDark ? 'text-white' : 'text-slate-800'}`}>{log.title}</h3>
+                        <p className={`text-xs font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{log.message}</p>
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-tighter text-emerald-500">
+                        {new Date(log.createdAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
                   </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[10px] font-black uppercase tracking-tighter ${isDark ? 'text-emerald-500' : 'text-emerald-500'}`}>
-                      {log.time}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* EMPTY STATE DECORATION */}
-        <div className="mt-20 flex flex-col items-center opacity-20">
-          <Clock size={40} className={isDark ? 'text-slate-600' : 'text-slate-300'} />
-          <p className={`text-[10px] font-black uppercase tracking-[0.3em] mt-4 ${isDark ? 'text-slate-600' : 'text-slate-300'}`}>End of Logs</p>
+                );
+              })}
+            </div>
+          )}
         </div>
 
       </main>
@@ -132,3 +139,17 @@ export default function HistoryLogPage() {
     </div>
   );
 }
+
+{/* 
+  type → pest
+title → Hama Terdeteksi
+message → Sensor PIR menangkap pergerakan. Sistem keamanan standby.
+
+type → watering
+title → Penyiraman Otomatis
+message → Kelembapan 22%. Pompa aktif selama 30 detik.
+
+type → connected
+title → System Connected
+message → Berhasil terhubung ke WiFi Polibatam.
+*/}

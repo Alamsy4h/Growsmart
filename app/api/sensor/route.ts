@@ -1,36 +1,55 @@
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 
-// GET
-export async function GET() {
+export async function POST(req: NextRequest) {
   try {
-    const data = await prisma.sensorData.findMany({
-      include: { plant: true },
-      orderBy: { createdAt: 'desc' }
-    })
+    const { temperature, humidity, soilMoisture, plantId } = await req.json();
 
-    return NextResponse.json(data)
+    if (!temperature || !humidity || !soilMoisture || !plantId) {
+      return NextResponse.json(
+        { success: false, message: "Data tidak lengkap" },
+        { status: 400 }
+      );
+    }
+
+    const data = await prisma.sensorData.create({
+      data: { temperature, humidity, soilMoisture, plantId },
+    });
+
+    // Cek threshold, kalau soilMoisture di bawah threshold → buat log otomatis
+    const config = await prisma.config.findFirst();
+    if (config && soilMoisture < config.soilThreshold) {
+      await prisma.log.create({
+        data: {
+          type: "watering",
+          title: "Penyiraman Otomatis",
+          message: `Kelembapan ${soilMoisture}%. Pompa aktif karena di bawah threshold ${config.soilThreshold}%.`,
+        },
+      });
+    }
+
+    return NextResponse.json({ success: true, data });
   } catch (error) {
-    return NextResponse.json({ error: "Gagal mengambil data" }, { status: 500 })
+    console.error("Sensor error:", error);
+    return NextResponse.json(
+      { success: false, message: "Terjadi kesalahan server" },
+      { status: 500 }
+    );
   }
 }
 
-// POST
-export async function POST(request: Request) {
+// GET — ambil data sensor terbaru untuk dashboard
+export async function GET() {
   try {
-    const body = await request.json()
+    const latest = await prisma.sensorData.findFirst({
+      orderBy: { createdAt: "desc" },
+    });
 
-    const data = await prisma.sensorData.create({
-      data: {
-        temperature: body.temperature,
-        humidity: body.humidity,
-        soilMoisture: body.soilMoisture,
-        plantId: body.plantId || 1
-      }
-    })
-
-    return NextResponse.json({ message: "Data masuk!", data })
+    return NextResponse.json({ success: true, data: latest });
   } catch (error) {
-    return NextResponse.json({ error: "Gagal menyimpan data" }, { status: 400 })
+    return NextResponse.json(
+      { success: false, message: "Terjadi kesalahan server" },
+      { status: 500 }
+    );
   }
 }
