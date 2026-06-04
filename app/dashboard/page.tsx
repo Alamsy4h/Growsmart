@@ -10,13 +10,24 @@ import {
   Moon, 
   Sun, 
   LogOut,
-  TrendingUp
+  TrendingUp,
+  Eye // Ditambahkan untuk representasi visual sensor PIR
 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function MonitoringPage() {
   const [isDark, setIsDark] = useState(false);
   const [userName, setUserName] = useState("...");
+  
+  const [sensorData, setSensorData] = useState({
+    temperature: "--",
+    soilMoisture: "--",
+    airHumidity: "--",
+    pumpStatus: "OFF",
+    motionStatus: "Aman", // State baru untuk PIR
+    avgTemperature: "--"
+  });
+
   const router = useRouter();
 
   useEffect(() => {
@@ -24,7 +35,43 @@ export default function MonitoringPage() {
       .then(res => res.json())
       .then(data => {
         if (data.success) setUserName(data.user.name);
-      });
+      })
+      .catch(err => console.error("Gagal mengambil data user:", err));
+
+    const fetchSensorData = () => {
+      fetch("/api/sensor") 
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.data) {
+            
+            const rawTemp = parseFloat(data.data.temperature);
+            const rawHumidity = parseFloat(data.data.air_humidity);
+            const rawAvgTemp = parseFloat(data.data.avg_temperature);
+            
+            const isSoilExist = data.data.soil_moisture !== null && data.data.soil_moisture !== undefined;
+            const rawSoil = isSoilExist ? parseFloat(data.data.soil_moisture) : NaN;
+
+            // Evaluasi data sensor PIR
+            const hasMotion = data.data.motion_detected === true;
+
+            setSensorData({
+              temperature: !isNaN(rawTemp) ? `${rawTemp.toFixed(1)}°C` : "--",
+              airHumidity: !isNaN(rawHumidity) ? `${rawHumidity.toFixed(1)}%` : "--",
+              soilMoisture: !isNaN(rawSoil) ? `${rawSoil.toFixed(0)}%` : "Belum Terpasang", 
+              pumpStatus: data.data.pump_status || "OFF", 
+              motionStatus: hasMotion ? "ADA GERAKAN!" : "Aman", // Mengatur teks info pergerakan
+              avgTemperature: !isNaN(rawAvgTemp) ? `${rawAvgTemp.toFixed(1)}` : "--"
+            });
+          }
+        })
+        .catch(err => console.error("Gagal mengambil data sensor:", err));
+    };
+
+    fetchSensorData();
+
+    const interval = setInterval(fetchSensorData, 5000);
+    return () => clearInterval(interval);
+
   }, []);
 
   const handleLogout = async () => {
@@ -55,33 +102,50 @@ export default function MonitoringPage() {
           <button onClick={() => setIsDark(!isDark)} className={`p-3 rounded-full transition-all ${isDark ? 'bg-slate-700 text-yellow-400' : 'bg-slate-100 text-slate-600'}`}>
             {isDark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
-<button
-  onClick={handleLogout}
-  className="bg-[#FF4D12] text-white px-6 py-3 rounded-full font-bold text-sm flex items-center gap-2 shadow-lg shadow-orange-200/20 hover:scale-105 transition-all"
->
-  Log out <LogOut size={16} />
-</button>
+          <button onClick={handleLogout} className="bg-[#FF4D12] text-white px-6 py-3 rounded-full font-bold text-sm flex items-center gap-2 shadow-lg shadow-orange-200/20 hover:scale-105 transition-all">
+            Log out <LogOut size={16} />
+          </button>
         </div>
       </nav>
 
-      {/* MAIN CONTENT */}
+      {/* MAIN MONITORING CONTENT */}
       <main className={`max-w-7xl mx-auto rounded-[3rem] p-12 shadow-2xl transition-all duration-500 min-h-[700px] border ${isDark ? 'bg-[#161C1E] border-slate-800' : 'bg-white border-slate-50'}`}>
         
-        {/* GREETING */}
         <div className="mb-10">
           <h2 className={`text-xl ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Hello, <span className={`${isDark ? 'text-white' : 'text-slate-900'} font-bold`}>{userName}</span> 👋</h2>
           <h1 className={`text-3xl font-black mt-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>Real-time Monitoring Greenhouse</h1>
         </div>
 
-        {/* STAT CARDS */}
+        {/* MONITORING STAT CARDS (Sekarang Menampung PIR Sensor di kolom ke-4) */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
-          <StatCard isDark={isDark} label="TEMPERATURE" value="32°C" icon={<Thermometer />} shadowColor="rgba(239, 68, 68, 0.15)" iconBg="bg-red-500/10" iconColor="text-red-500" />
-          <StatCard isDark={isDark} label="SOIL MOISTURE" value="32 %" icon={<Droplets />} shadowColor="rgba(249, 115, 22, 0.15)" iconBg="bg-orange-500/10" iconColor="text-orange-500" />
-          <StatCard isDark={isDark} label="AIR TEMPERATURE" value="32°C" icon={<Wind />} shadowColor="rgba(59, 130, 246, 0.15)" iconBg="bg-blue-500/10" iconColor="text-blue-500" />
-          <StatCard isDark={isDark} label="SECURITY" value="Safe" icon={<ShieldCheck />} shadowColor="rgba(16, 185, 129, 0.15)" iconBg="bg-emerald-500/10" iconColor="text-emerald-500" />
+          <StatCard isDark={isDark} label="AIR TEMPERATURE" value={sensorData.temperature} icon={<Thermometer />} shadowColor="rgba(239, 68, 68, 0.15)" iconBg="bg-red-500/10" iconColor="text-red-500" />
+          
+          <StatCard 
+            isDark={isDark} 
+            label="SOIL MOISTURE" 
+            value={sensorData.soilMoisture} 
+            icon={<Droplets />} 
+            shadowColor="rgba(249, 115, 22, 0.15)" 
+            iconBg="bg-orange-500/10" 
+            iconColor="text-orange-500"
+            customClass={sensorData.soilMoisture === "Belum Terpasang" ? "text-base font-bold text-slate-400" : ""}
+          />
+          
+          <StatCard isDark={isDark} label="AIR HUMIDITY" value={sensorData.airHumidity} icon={<Wind />} shadowColor="rgba(59, 130, 246, 0.15)" iconBg="bg-blue-500/10" iconColor="text-blue-500" />
+          
+          {/* SEKSI BARU: StatCard PIR Motion Detection */}
+          <StatCard 
+            isDark={isDark} 
+            label="MOTION DETECTOR" 
+            value={sensorData.motionStatus} 
+            icon={<Eye />} 
+            shadowColor="rgba(147, 51, 234, 0.15)" 
+            iconBg={sensorData.motionStatus === "ADA GERAKAN!" ? "bg-red-500/20" : "bg-purple-500/10"} 
+            iconColor={sensorData.motionStatus === "ADA GERAKAN!" ? "text-red-500 animate-ping" : "text-purple-500"} 
+            customClass={sensorData.motionStatus === "ADA GERAKAN!" ? "text-xl font-black text-red-500 animate-pulse" : "text-2xl font-black text-emerald-500"}
+          />
         </div>
 
-        {/* BOTTOM SECTION: GRAPH & SUMMARY */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 items-start">
           
           {/* GRAPH ANALYSIS */}
@@ -96,7 +160,6 @@ export default function MonitoringPage() {
               </div>
             </div>
             
-            {/* WAVE GRAPH */}
             <div className="h-52 w-full relative pt-4">
               <svg viewBox="0 0 800 200" className="w-full h-full overflow-visible">
                 <path 
@@ -121,17 +184,18 @@ export default function MonitoringPage() {
             </div>
           </div>
 
-          {/* SISTEM SUMMARY */}
+          {/* SYSTEM SUMMARY */}
           <div className={`rounded-[2.5rem] p-10 border transition-all ${isDark ? 'bg-[#1C2426] border-slate-800' : 'bg-[#F8FBFB] border-slate-50'}`}>
             <h3 className={`font-bold text-xl mb-4 ${isDark ? 'text-white' : 'text-slate-800'}`}>Sistem Summary</h3>
             <p className="text-slate-500 text-xs leading-relaxed mb-10">
-              The plants are in optimal condition. No manual watering is required at this time.
+              Status Pompa saat ini: <span className="font-bold">{sensorData.pumpStatus}</span>. 
+              {sensorData.motionStatus === "ADA GERAKAN!" && " [PERINGATAN]: Terdeteksi aktivitas pergerakan di dalam area kebun tanaman!"}
             </p>
             
             <div className="space-y-5 mb-12">
               <div className="flex justify-between items-center">
                 <span className={`text-[10px] font-black uppercase tracking-wider ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>Rata-rata Suhu</span>
-                <span className="font-black text-[#00B67A] text-sm">28.4°C</span>
+                <span className="font-black text-[#00B67A] text-sm">{sensorData.avgTemperature}°C</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className={`text-[10px] font-black uppercase tracking-wider ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>Total Air Terpakai</span>
@@ -154,8 +218,7 @@ export default function MonitoringPage() {
   );
 }
 
-{/* STAT CARD COMPONENT WITH FIX FOR CLONEELEMENT ERROR */}
-function StatCard({ label, value, icon, shadowColor, iconBg, iconColor, isDark }: any) {
+function StatCard({ label, value, icon, shadowColor, iconBg, iconColor, isDark, customClass }: any) {
   return (
     <div 
       className={`rounded-[2.5rem] p-8 flex flex-col items-center justify-center border transition-all ${isDark ? 'bg-[#1C2426] border-slate-800' : 'bg-white border-slate-50'}`}
@@ -165,7 +228,9 @@ function StatCard({ label, value, icon, shadowColor, iconBg, iconColor, isDark }
         {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement<any>, { size: 24 }) : icon}
       </div>
       <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">{label}</p>
-      <p className={`text-3xl font-black ${isDark ? 'text-white' : 'text-slate-800'}`}>{value}</p>
+      <p className={`text-3xl font-black text-center ${isDark ? 'text-white' : 'text-slate-800'} ${customClass}`}>
+        {value}
+      </p>
     </div>
   );
 }

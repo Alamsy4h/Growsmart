@@ -17,15 +17,17 @@ model Plant {
 }
 
 model SensorData {
-  id           Int      @id @default(autoincrement())
-  temperature  Float
-  humidity     Float
-  soilMoisture Float
-  createdAt    DateTime @default(now())
-
-  plantId Int
-  plant   Plant @relation(fields: [plantId], references: [id])
+  id             Int      @id @default(autoincrement())
+  temperature    Float
+  humidity       Float
+  soilMoisture   Float
+  motionDetected Boolean  @default(false) // <--- Tambahkan field ini
+  plantId        Int
+  plant          Plant    @relation(fields: [plantId], references: [id])
+  createdAt      DateTime @default(now())
 }
+
+
 
 model User {
   id        Int      @id @default(autoincrement())
