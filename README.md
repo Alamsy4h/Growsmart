@@ -18,14 +18,14 @@ GrowSmart integrates IoT hardware with a modern web dashboard, providing a pract
 
 ## ✨ Features
 
-✅🌡️ Real-time temperature monitoring
-✅💧 Real-time air humidity monitoring
-✅🌱 Soil moisture monitoring
-✅🚶 Motion detection using PIR sensor
-✅🚿 Automatic watering system
-✅⚙️ Configurable soil moisture threshold
-✅📊 Sensor data history
-✅🌐 Web-based dashboard for monitoring and management
+- 🌡️ Real-time temperature monitoring
+- 💧 Real-time air humidity monitoring
+- 🌱 Soil moisture monitoring
+- 🚶 Motion detection using PIR sensor
+- 🚿 Automatic watering system
+- ⚙️ Configurable soil moisture threshold
+- 📊 Sensor data history
+- 🌐 Web-based dashboard for monitoring and management
 
 ...
 
