@@ -54,21 +54,23 @@ GrowSmart integrates IoT hardware with a modern web dashboard, providing a pract
 
 ...
 
-## 📂 Project Structure
+## 📁 Project Structure
 
+```text
 GrowSmart/
 ├── app/                 # Next.js application
-├── components/          # Reusable UI components
-├── prisma/              # Database schema and migrations
-├── public/              # Static assets
 ├── firmware/            # ESP32 firmware
 │   ├── include/
 │   ├── lib/
 │   ├── src/
-│   ├── test/            # Unit testing
+│   ├── test/
 │   └── platformio.ini
+├── lib/                 # Shared libraries
+├── prisma/              # Prisma schema and migrations
+├── public/              # Static assets
 ├── package.json
 └── README.md
+```
 
 ...
 
