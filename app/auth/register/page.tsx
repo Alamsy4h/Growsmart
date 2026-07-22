@@ -20,8 +20,14 @@ export default function RegisterPage() {
     setLoading(true);
     setError("");
 
+    if (form.password !== form.confirmPassword) {
+      setError("Konfirmasi password tidak cocok");
+      setLoading(false);
+      return;
+    }
+
     try {
-      const res = await fetch("/api/register", {
+      const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
