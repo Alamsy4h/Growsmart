@@ -6,72 +6,98 @@ import {
   Thermometer, 
   Droplets, 
   Wind, 
-  ShieldCheck, 
   Moon, 
   Sun, 
   LogOut,
   TrendingUp,
-  Eye // Ditambahkan untuk representasi visual sensor PIR
+  Eye,
+  Download
 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function MonitoringPage() {
   const [isDark, setIsDark] = useState(false);
   const [userName, setUserName] = useState("...");
+  const [isDownloading, setIsDownloading] = useState(false);
   
   const [sensorData, setSensorData] = useState({
     temperature: "--",
     soilMoisture: "--",
     airHumidity: "--",
     pumpStatus: "OFF",
-    motionStatus: "Aman", // State baru untuk PIR
+    motionStatus: "Aman",
     avgTemperature: "--"
   });
+
+  // State array data grafik (default 12 poin bernilai 0 untuk mencegah NaN)
+  const [graphData, setGraphData] = useState<number[]>([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  const timeLabels = ["00:00", "02:00", "04:00", "06:00", "08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00", "22:00"];
 
   const router = useRouter();
 
   useEffect(() => {
+    // 1. Ambil Profil User
     fetch("/api/me")
       .then(res => res.json())
       .then(data => {
-        if (data.success) setUserName(data.user.name);
+        if (data.success && data.user) setUserName(data.user.name);
       })
       .catch(err => console.error("Gagal mengambil data user:", err));
 
+    // 2. Fetch Data Real-Time Sensor
     const fetchSensorData = () => {
       fetch("/api/sensor") 
         .then(res => res.json())
         .then(data => {
           if (data.success && data.data) {
-            
             const rawTemp = parseFloat(data.data.temperature);
-            const rawHumidity = parseFloat(data.data.air_humidity);
+            const rawHumidity = parseFloat(data.data.air_humidity || data.data.humidity);
             const rawAvgTemp = parseFloat(data.data.avg_temperature);
             
             const isSoilExist = data.data.soil_moisture !== null && data.data.soil_moisture !== undefined;
             const rawSoil = isSoilExist ? parseFloat(data.data.soil_moisture) : NaN;
 
-            // Evaluasi data sensor PIR
-            const hasMotion = data.data.motion_detected === true;
+            const hasMotion = data.data.motion_detected === true || data.data.motionStatus === true;
 
             setSensorData({
-              temperature: !isNaN(rawTemp) ? `${rawTemp.toFixed(1)}°C` : "--",
+              temperature: !isNaN(rawTemp) ? `${rawTemp.toFixed(1)}°C` : "0.0°C",
               airHumidity: !isNaN(rawHumidity) ? `${rawHumidity.toFixed(1)}%` : "--",
-              soilMoisture: !isNaN(rawSoil) ? `${rawSoil.toFixed(0)}%` : "Belum Terpasang", 
-              pumpStatus: data.data.pump_status || "OFF", 
-              motionStatus: hasMotion ? "ADA GERAKAN!" : "Aman", // Mengatur teks info pergerakan
-              avgTemperature: !isNaN(rawAvgTemp) ? `${rawAvgTemp.toFixed(1)}` : "--"
+              soilMoisture: !isNaN(rawSoil) ? `${rawSoil.toFixed(0)}%` : "0%", 
+              pumpStatus: data.data.pump_status || (data.data.pumpActive ? "ON" : "OFF"), 
+              motionStatus: hasMotion ? "ADA GERAKAN!" : "Aman",
+              avgTemperature: !isNaN(rawAvgTemp) ? `${rawAvgTemp.toFixed(1)}` : "0.0"
             });
           }
         })
         .catch(err => console.error("Gagal mengambil data sensor:", err));
     };
 
+    // 3. Fetch Data Grafik dari Endpoint /api/sensor/chart
+    const fetchGraphData = () => {
+      fetch("/api/sensor/chart")
+        .then(res => res.json())
+        .then(resData => {
+          if (resData.success && Array.isArray(resData.data) && resData.data.length > 0) {
+            const values = resData.data.map((item: any) => {
+              const val = typeof item === 'number' ? item : item.soilMoisture;
+              return isNaN(val) ? 0 : val;
+            });
+            setGraphData(values);
+          }
+        })
+        .catch(err => console.error("Gagal mengambil data grafik:", err));
+    };
+
     fetchSensorData();
+    fetchGraphData();
 
-    const interval = setInterval(fetchSensorData, 5000);
-    return () => clearInterval(interval);
+    const intervalSensor = setInterval(fetchSensorData, 5000);
+    const intervalGraph = setInterval(fetchGraphData, 30000); // Update grafik tiap 30 detik
 
+    return () => {
+      clearInterval(intervalSensor);
+      clearInterval(intervalGraph);
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -79,6 +105,83 @@ export default function MonitoringPage() {
     router.push("/auth/login");
     router.refresh();
   };
+
+  // Unduh Laporan dalam Format CSV
+  const handleDownloadReport = async () => {
+    setIsDownloading(true);
+    try {
+      const res = await fetch("/api/logs");
+      const result = await res.json();
+
+      const logs = result.data || result;
+
+      let csvContent = "data:text/csv;charset=utf-8,ID,Waktu,Suhu (C),Kelembapan Udara (%),Kelembapan Tanah (%),Deteksi Gerakan\n";
+
+      if (Array.isArray(logs) && logs.length > 0) {
+        logs.forEach((log: any) => {
+          const row = [
+            log.id,
+            `"${new Date(log.createdAt || log.created_at).toLocaleString("id-ID")}"`,
+            log.temperature ?? 0,
+            log.humidity ?? log.air_humidity ?? 0,
+            log.soilMoisture ?? log.soil_moisture ?? 0,
+            log.motionDetected || log.motion_detected ? "ADA GERAKAN" : "Aman"
+          ].join(",");
+          csvContent += row + "\n";
+        });
+      } else {
+        csvContent += `1,"${new Date().toLocaleString("id-ID")}",${sensorData.temperature},${sensorData.airHumidity},${sensorData.soilMoisture},${sensorData.motionStatus}\n`;
+      }
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `Laporan_GrowSmart_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+    } catch (error) {
+      console.error("Gagal mengunduh laporan:", error);
+      alert("Gagal mengunduh laporan.");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  // HELPER MENGHITUNG DRAFT KURVA SVG TANPA ERROR NaN
+  const getSvgPath = (data: number[]) => {
+    const width = 800;
+    const height = 180;
+    
+    // Cegah error jika array kurang dari 2 elemen
+    const safeData = data.length < 2 ? [data[0] || 0, data[0] || 0] : data;
+    const step = width / (safeData.length - 1);
+
+    const points = safeData.map((val, idx) => {
+      const clampedVal = Math.min(Math.max(isNaN(val) ? 0 : val, 0), 100);
+      const x = idx * step;
+      const y = height - (clampedVal / 100) * 140;
+
+      return { 
+        x: isNaN(x) ? 0 : x, 
+        y: isNaN(y) ? height : y 
+      };
+    });
+
+    let path = `M ${points[0].x},${points[0].y}`;
+    for (let i = 0; i < points.length - 1; i++) {
+      const xMid = (points[i].x + points[i + 1].x) / 2;
+      const yMid = (points[i].y + points[i + 1].y) / 2;
+      const cpX1 = (xMid + points[i].x) / 2;
+      const cpX2 = (xMid + points[i + 1].x) / 2;
+      path += ` Q ${cpX1},${points[i].y} ${xMid},${yMid} T ${points[i + 1].x},${points[i + 1].y}`;
+    }
+
+    return { path, points };
+  };
+
+  const { path: svgPath, points: svgPoints } = getSvgPath(graphData);
 
   return (
     <div className={`min-h-screen transition-all duration-500 p-8 font-sans ${isDark ? 'bg-[#0B0F10]' : 'bg-[#F0F4F4]'}`}>
@@ -108,7 +211,7 @@ export default function MonitoringPage() {
         </div>
       </nav>
 
-      {/* MAIN MONITORING CONTENT */}
+      {/* MAIN CONTENT */}
       <main className={`max-w-7xl mx-auto rounded-[3rem] p-12 shadow-2xl transition-all duration-500 min-h-[700px] border ${isDark ? 'bg-[#161C1E] border-slate-800' : 'bg-white border-slate-50'}`}>
         
         <div className="mb-10">
@@ -116,7 +219,7 @@ export default function MonitoringPage() {
           <h1 className={`text-3xl font-black mt-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>Real-time Monitoring Greenhouse</h1>
         </div>
 
-        {/* MONITORING STAT CARDS (Sekarang Menampung PIR Sensor di kolom ke-4) */}
+        {/* STAT CARDS */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
           <StatCard isDark={isDark} label="AIR TEMPERATURE" value={sensorData.temperature} icon={<Thermometer />} shadowColor="rgba(239, 68, 68, 0.15)" iconBg="bg-red-500/10" iconColor="text-red-500" />
           
@@ -128,12 +231,10 @@ export default function MonitoringPage() {
             shadowColor="rgba(249, 115, 22, 0.15)" 
             iconBg="bg-orange-500/10" 
             iconColor="text-orange-500"
-            customClass={sensorData.soilMoisture === "Belum Terpasang" ? "text-base font-bold text-slate-400" : ""}
           />
           
           <StatCard isDark={isDark} label="AIR HUMIDITY" value={sensorData.airHumidity} icon={<Wind />} shadowColor="rgba(59, 130, 246, 0.15)" iconBg="bg-blue-500/10" iconColor="text-blue-500" />
           
-          {/* SEKSI BARU: StatCard PIR Motion Detection */}
           <StatCard 
             isDark={isDark} 
             label="MOTION DETECTOR" 
@@ -148,45 +249,52 @@ export default function MonitoringPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 items-start">
           
-          {/* GRAPH ANALYSIS */}
+          {/* MOISTURE GRAPH */}
           <div className={`lg:col-span-2 p-10 rounded-[2.5rem] border transition-all ${isDark ? 'bg-[#1C2426] border-slate-800' : 'bg-[#F9FBFB] border-slate-100 shadow-sm'}`}>
             <div className="flex justify-between items-center mb-8">
               <div>
                 <h3 className={`font-bold text-lg ${isDark ? 'text-white' : 'text-slate-800'}`}>Moisture Level Analysis</h3>
-                <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mt-1">Data per 2 hours</p>
+                <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mt-1">UPDATED EVERY 2 HOURS</p>
               </div>
               <div className={`p-2 rounded-xl ${isDark ? 'bg-slate-800' : 'bg-white shadow-sm'}`}>
                 <TrendingUp className="text-[#00B67A]" size={20} />
               </div>
             </div>
             
-            <div className="h-52 w-full relative pt-4">
+            <div className="h-60 w-full relative pt-4">
               <svg viewBox="0 0 800 200" className="w-full h-full overflow-visible">
                 <path 
-                  d="M0,150 Q100,160 200,120 T400,100 T600,140 T800,80" 
+                  d={svgPath} 
                   fill="none" 
                   stroke="#00B67A" 
                   strokeWidth="4" 
                   strokeLinecap="round"
-                  className="drop-shadow-[0_10px_10px_rgba(0,182,122,0.2)]"
+                  className="drop-shadow-[0_10px_10px_rgba(0,182,122,0.2)] transition-all duration-700"
                 />
-                {[200, 400, 600].map((x, i) => (
-                   <circle key={i} cx={x} cy={i === 1 ? 100 : (i === 0 ? 120 : 140)} r="5" fill="#00B67A" stroke={isDark ? "#1C2426" : "white"} strokeWidth="2" />
+                {svgPoints.map((pt, i) => (
+                  <circle 
+                    key={i} 
+                    cx={pt.x} 
+                    cy={pt.y} 
+                    r="5" 
+                    fill="#00B67A" 
+                    stroke={isDark ? "#1C2426" : "white"} 
+                    strokeWidth="2" 
+                  />
                 ))}
               </svg>
-              <div className={`flex justify-between mt-6 text-[11px] font-black tracking-widest ${isDark ? 'text-slate-600' : 'text-slate-300'}`}>
-                <span>08:00</span>
-                <span>12:00</span>
-                <span>16:00</span>
-                <span>20:00</span>
-                <span>00:00</span>
+
+              <div className={`flex justify-between mt-6 text-[9px] md:text-[10px] font-black tracking-widest ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                {timeLabels.map((time, idx) => (
+                  <span key={idx} className={idx % 2 === 0 ? "opacity-100" : "opacity-60"}>{time}</span>
+                ))}
               </div>
             </div>
           </div>
 
           {/* SYSTEM SUMMARY */}
           <div className={`rounded-[2.5rem] p-10 border transition-all ${isDark ? 'bg-[#1C2426] border-slate-800' : 'bg-[#F8FBFB] border-slate-50'}`}>
-            <h3 className={`font-bold text-xl mb-4 ${isDark ? 'text-white' : 'text-slate-800'}`}>Sistem Summary</h3>
+            <h3 className={`font-bold text-xl mb-4 ${isDark ? 'text-white' : 'text-slate-800'}`}>System Summary</h3>
             <p className="text-slate-500 text-xs leading-relaxed mb-10">
               Status Pompa saat ini: <span className="font-bold">{sensorData.pumpStatus}</span>. 
               {sensorData.motionStatus === "ADA GERAKAN!" && " [PERINGATAN]: Terdeteksi aktivitas pergerakan di dalam area kebun tanaman!"}
@@ -203,8 +311,13 @@ export default function MonitoringPage() {
               </div>
             </div>
 
-            <button className="w-full py-5 bg-[#00B67A] text-white rounded-[1.5rem] font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-emerald-900/10 hover:bg-[#009e6a] transition-all active:scale-95">
-              Unduh Laporan
+            <button 
+              onClick={handleDownloadReport}
+              disabled={isDownloading}
+              className="w-full py-5 bg-[#00B67A] text-white rounded-[1.5rem] font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-emerald-900/10 hover:bg-[#009e6a] transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <Download size={14} />
+              {isDownloading ? "Mengunduh..." : "Unduh Laporan"}
             </button>
           </div>
 

@@ -10,10 +10,10 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    // Menggunakan pengecekan typeof yang ketat agar angka 0 tidak dianggap undefined
+    // Pengecekan typeof yang ketat agar angka 0 tidak dianggap undefined
     const temperature = typeof body.temperature === 'number' ? body.temperature : undefined;
     const humidity = typeof body.humidity === 'number' ? body.humidity : undefined;
-    const motionDetected = body.motionDetected !== undefined ? body.motionDetected : false;
+    const motionDetected = body.motionDetected !== undefined ? Boolean(body.motionDetected) : false;
     const soilMoisture = typeof body.soilMoisture === 'number' ? body.soilMoisture : 0;
       
     let plantId = body.plantId ? parseInt(body.plantId) : 1;
@@ -25,6 +25,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ---------------------------------------------------------------------
+    // CEK ATAU BUAT DATA PLANT (Menggunakan model 'plant')
+    // ---------------------------------------------------------------------
     let existingPlant = await prisma.plant.findUnique({
       where: { id: plantId }
     });
@@ -34,21 +37,21 @@ export async function POST(req: NextRequest) {
         data: { 
           id: plantId, 
           name: "Tanaman Greenhouse", 
-          type: "Tomat" 
+          type: "Tomat"
         }
       });
     }
 
-    // Menyimpan data ke database MySQL
-    const data = await prisma.sensorData.create({
+    // ---------------------------------------------------------------------
+    // SIMPAN KE DATABASE (Menggunakan model 'sensordata')
+    // ---------------------------------------------------------------------
+    const data = await prisma.sensordata.create({
       data: { 
         temperature, 
         humidity, 
         soilMoisture, 
         motionDetected,
-        plant: {
-          connect: { id: existingPlant.id }
-        }
+        plantId: existingPlant.id
       },
     });
 
@@ -67,7 +70,10 @@ export async function POST(req: NextRequest) {
           
           await prisma.config.update({
             where: { id: config.id },
-            data: { manualWatering: true }
+            data: { 
+              manualWatering: true,
+              updatedAt: new Date()
+            }
           });
         }
       } else if (soilMoisture >= config.soilThreshold && config.manualWatering) {
@@ -81,40 +87,40 @@ export async function POST(req: NextRequest) {
 
         await prisma.config.update({
           where: { id: config.id },
-          data: { manualWatering: false }
+          data: { 
+            manualWatering: false,
+            updatedAt: new Date()
+          }
         });
       }
     }
 
+    // --- LOGIKA SECURITY LOG DENGAN COOLDOWN 60 DETIK ---
+    if (motionDetected) {
+      const cooldownTime = new Date(Date.now() - 60 * 1000);
 
-// --- LOGIKA SECURITY LOG DENGAN COOLDOWN 30 DETIK ---
-if (motionDetected) {
+      const recentLog = await prisma.log.findFirst({
+        where: {
+          type: "security",
+          createdAt: {
+            gte: cooldownTime,
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
 
-  const cooldownTime = new Date(Date.now() - 60 * 1000);
-
-  const recentLog = await prisma.log.findFirst({
-    where: {
-      type: "security",
-      createdAt: {
-        gte: cooldownTime,
-      },
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-  });
-
-  if (!recentLog) {
-    await prisma.log.create({
-      data: {
-        type: "security",
-        title: "Pergerakan Terdeteksi",
-        message:
-          "Sensor PIR mendeteksi adanya aktivitas pergerakan di dalam area Greenhouse.",
-      },
-    });
-  }
-}
+      if (!recentLog) {
+        await prisma.log.create({
+          data: {
+            type: "security",
+            title: "Pergerakan Terdeteksi",
+            message: "Sensor PIR mendeteksi adanya aktivitas pergerakan di dalam area Greenhouse.",
+          },
+        });
+      }
+    }
 
     return NextResponse.json({ success: true, message: "Data berhasil disimpan", data });
   } catch (error) {
@@ -131,7 +137,8 @@ if (motionDetected) {
 // =========================================================================
 export async function GET() {
   try {
-    const latest = await prisma.sensorData.findFirst({
+    // Memanggil model 'sensordata' (huruf kecil semua sesuai schema.prisma)
+    const latest = await prisma.sensordata.findFirst({
       orderBy: { createdAt: "desc" },
     });
 
@@ -144,7 +151,7 @@ export async function GET() {
           soil_moisture: 0,
           motion_detected: false,
           pump_status: "OFF",
-          avg_temperature: "0"
+          avg_temperature: "0.0"
         }
       });
     }
@@ -160,7 +167,7 @@ export async function GET() {
         soil_moisture: latest.soilMoisture, 
         motion_detected: latest.motionDetected, 
         pump_status: pumpStatus,
-        avg_temperature: latest.temperature.toFixed(1)
+        avg_temperature: typeof latest.temperature === 'number' ? latest.temperature.toFixed(1) : "0.0"
       }
     });
   } catch (error) {

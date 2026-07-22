@@ -5,11 +5,11 @@
 #include <DHT.h>
 
 // Konfigurasi Wi-Fi
-const char* ssid = "Polibatam WiFi GU";
-const char* password = "";
+const char* ssid = "Bulkup";
+const char* password = "12345698";
 
 // URL API Server Laptop (Pastikan IP sesuai dengan hasil ipconfig terbaru)
-const char* serverUrl = "http://10.177.47.225:3000/api/sensor"; 
+const char* serverUrl = "http://10.87.33.169:3000/api/sensor"; 
 
 // Konfigurasi Sensor DHT22
 #define DHTPIN 4          

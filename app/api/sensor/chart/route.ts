@@ -1,19 +1,20 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import type { sensordata } from "@prisma/client";
 
 export async function GET() {
   try {
     const since = new Date();
     since.setHours(since.getHours() - 24);
 
-    const data = await prisma.sensorData.findMany({
+    const data: sensordata[] = await prisma.sensordata.findMany({
       where: { createdAt: { gte: since } },
       orderBy: { createdAt: "asc" },
     });
 
     const grouped: Record<string, { total: number; count: number }> = {};
 
-    data.forEach((item) => {
+    data.forEach((item: sensordata) => {
       const hour = item.createdAt.getHours();
       const slot = Math.floor(hour / 2) * 2;
       const key = `${String(slot).padStart(2, "0")}:00`;
